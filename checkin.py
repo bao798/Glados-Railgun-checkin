@@ -520,35 +520,52 @@ logger = init_logger()
 
 
 def main():
-    """主函数"""
+    """主函数：签到失败时以非零退出码结束，确保 Actions 显示失败。"""
+    failed = False
+    title = "# 未执行签到"
+    content = ""
+    config = None
+
     try:
-        # 1. 加载配置
         logger.info(f"{LogEmoji.START} 步骤 1: 加载配置")
         config = Config()
 
         if not config.cookies_list:
-            logger.error(f"{LogEmoji.ERROR} 未找到有效的 Cookie, 退出程序。")
-            title, content = "# 未找到 cookies!", ""
+            logger.error(f"{LogEmoji.ERROR} 未找到有效的 Cookie，退出程序。")
+            title = "# 未找到 cookies!"
+            failed = True
         else:
-            # 2. 执行签到
             logger.info(f"{LogEmoji.START} 步骤 2: 执行签到")
             checker = Checker(config)
             checker.checkin_all()
 
-            # 3. 格式化结果
             logger.info(f"{LogEmoji.START} 步骤 3: 格式化结果")
             title, content, log_content = checker.format_results()
             logger.info(f"\n{LogEmoji.END}========== 签到总结 ==========\n{title}\n{log_content}")
 
-    except Exception as e:
-        logger.error(f"{LogEmoji.ERROR} 主程序执行过程中发生未预期的错误: {e}")
-        title, content, log_content = "# 脚本执行出错", str(e), str(e)
+            # 重复签到属于可接受结果；任何实际失败都应使 CI 失败。
+            failed = not checker.results or any(
+                result.code not in (CheckinStatus.SUCCESS, CheckinStatus.REPEAT)
+                for result in checker.results
+            )
+    except Exception:
+        # 不输出 Cookie 等敏感环境变量。
+        logger.exception(f"{LogEmoji.ERROR} 主程序执行过程中发生未预期的错误")
+        title = "# 脚本执行出错"
+        content = "请查看 GitHub Actions 日志并核对登录凭据。"
+        failed = True
 
-    # 4. 发送推送
     logger.info(f"{LogEmoji.START} 步骤 4: 发送推送")
-    push_service = PushService(config if "config" in locals() else "")
-    push_service.send(title, content)
+    if config is not None:
+        try:
+            PushService(config).send(title, content)
+        except Exception:
+            logger.exception(f"{LogEmoji.ERROR} 推送出现异常")
     logger.info(f"{LogEmoji.END} 签到完成")
+
+    if failed:
+        logger.error("签到任务失败：请更新 GLADOS_COOKIES 并核对认证流程。")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
