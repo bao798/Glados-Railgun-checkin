@@ -3,7 +3,7 @@ name: auto check
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths-ignore:
       - 'README.md'
       - 'imgs/**'
@@ -17,7 +17,6 @@ jobs:
       
     permissions:
       contents: read
-      actions: write
 
     strategy:
       matrix:
@@ -56,11 +55,3 @@ jobs:
     - name: Keep alive
       uses: liskin/gh-workflow-keepalive@v1 
         
-    - name: Delete workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ github.token }}
-        repository: ${{ github.repository }}
-        retain_days: 7
-        keep_minimum_runs: 7
-        delete_run_by_conclusion_pattern: success
