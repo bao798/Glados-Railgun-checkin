@@ -8,7 +8,8 @@ on:
       - 'README.md'
       - 'imgs/**'
   schedule:
-    - cron: '0 4,10 * * *'
+    # Beijing time: 08:17, 12:17, 18:17, 22:17; avoid top-of-hour load.
+    - cron: '17 0,4,10,14 * * *'
 
 jobs:
   build:
