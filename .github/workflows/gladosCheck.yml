@@ -10,6 +10,8 @@ on:
   schedule:
     # Beijing time: 08:17, 12:17, 18:17, 22:17; avoid top-of-hour load.
     - cron: '17 0,4,10,14 * * *'
+    # Temporary scheduler verification; remove after observing a schedule event.
+    - cron: '*/5 * * * *'
 
 jobs:
   build:
