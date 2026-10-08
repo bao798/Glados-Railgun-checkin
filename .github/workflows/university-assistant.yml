@@ -8,7 +8,6 @@ on:
     # Asia/Shanghai: hourly 08:37 through 22:37. Daily digest at/after 21:37.
     - cron: '37 0-14 * * *'
     # Temporary native-scheduler verification; remove after first schedule event.
-    - cron: '*/5 * * * *'
   workflow_run:
     workflows: ['GLaDOS scheduled checkin']
     types: [completed]
