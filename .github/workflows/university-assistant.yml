@@ -25,10 +25,6 @@ permissions:
   contents: write
   actions: read
 
-concurrency:
-  group: university-assistant
-  cancel-in-progress: false
-
 jobs:
   scheduler-health:
     if: github.event_name != 'workflow_run'
@@ -54,6 +50,9 @@ jobs:
                   print('Scheduler reactivated:', response.status)
           PY
   monitor:
+    concurrency:
+      group: university-assistant
+      cancel-in-progress: false
     if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 25
