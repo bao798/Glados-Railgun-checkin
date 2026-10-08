@@ -51,3 +51,7 @@ GitHub schedule 是尽力调度，可能延迟或丢弃；电脑关机不影响�
 若使用 Gmail 发信：SMTP_USER Secret 填 Gmail 完整地址；SMTP_PASSWORD Secret 填 Google 应用专用密码；EMAIL_TO Secret 填收件地址。在 Actions Variables 中设置 SMTP_HOST=smtp.gmail.com、SMTP_PORT=465（SSL）。Google 应用专用密码要求启用两步验证，部分组织账户可能不支持。参考：https://support.google.com/accounts/answer/185833 。
 
 配置后 Actions → University private automation → Run workflow → mode=mail-test，仅发送一封测试邮件，不抓取官网、不读写通知队列。缺少配置会明确列出缺少的 Secret 名称，不打印凭据。SMTP 接受后仍需确认收件箱实际收到，再运行 mode=digest 初始化监控并验证日报。
+
+## 定时触发与补发保护
+
+主链路按北京时间 08:37—22:37 每小时执行，21:37 起按日期去重发送日报。备用链路由 GLaDOS scheduled checkin 的原生 schedule 运行完成触发学校监控，推送提交引起的签到运行不会启动监控。GLaDOS 22:17 的定时运行可补发当日尚未发送的日报。两条链路共用 university-assistant 并发组与 automation-state 分支，串行处理相同待发队列。签到工作流的定时保活任务还会检查并重新启用学校工作流；学校自身也检查启用状态。GitHub 调度仍属于尽力服务，两条链路不能消除平台整体故障。
