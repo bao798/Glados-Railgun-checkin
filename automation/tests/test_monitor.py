@@ -53,6 +53,16 @@ class MonitorTests(unittest.TestCase):
     def test_missing_smtp_does_not_send(self):
         with patch.dict(m.os.environ,{},clear=True):
             with self.assertRaises(ValueError):m.send_mail('t','t','t')
+    def test_mail_test_missing_credentials_does_not_scan(self):
+        with patch.dict(m.os.environ,{},clear=True), patch.object(m.sys,'argv',['run.py','--test-mail']), patch.object(m,'fetch') as fetch, patch.object(m,'send_mail') as send:
+            self.assertEqual(m.main(),1)
+        fetch.assert_not_called()
+        send.assert_not_called()
+    def test_mail_test_sends_without_scanning(self):
+        with patch.dict(m.os.environ,{'SMTP_USER':'sender@gmail.com','SMTP_PASSWORD':'example','EMAIL_TO':'receiver@gmail.com'},clear=True), patch.object(m.sys,'argv',['run.py','--test-mail']), patch.object(m,'fetch') as fetch, patch.object(m,'send_mail') as send:
+            self.assertEqual(m.main(),0)
+        fetch.assert_not_called()
+        send.assert_called_once()
     def test_39_schools(self):
         cfg=m.json.loads((m.BASE/'sources.json').read_text())
         self.assertEqual(sum(s['group']=='985' for s in cfg['sources']),39)

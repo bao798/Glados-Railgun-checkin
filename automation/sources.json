@@ -41,7 +41,7 @@
     {"name":"大连理工大学","url":"https://gs.dlut.edu.cn/yjszs.htm","group":"985"},
     {"name":"东北大学","url":"https://yz.neu.edu.cn/","group":"985"},
     {"name":"哈尔滨工业大学","url":"https://yzb.hit.edu.cn/","group":"985"},
-    {"name":"国防科技大学","url":"https://yjszs.nudt.edu.cn/","group":"985"},
+    {"name":"国防科技大学","url":"https://yjszs.nudt.edu.cn/index/new-index.view","group":"985"},
     {"name":"中国科学院大学","url":"https://admission.ucas.edu.cn/","group":"UCAS"},
     {"name":"中科院数学与系统科学研究院","url":"https://amss.cas.cn/admission/","group":"CAS"},
     {"name":"中科院计算技术研究所","url":"https://www.ict.ac.cn/xwgg/tzgg/","group":"CAS"},

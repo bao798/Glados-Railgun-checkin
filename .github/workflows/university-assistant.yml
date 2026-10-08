@@ -13,7 +13,7 @@ on:
         description: 'preview: no mail/state write; digest: send test/daily digest; normal: scheduled behavior'
         default: digest
         type: choice
-        options: [preview, digest, normal]
+        options: [mail-test, preview, digest, normal]
 
 permissions:
   contents: write
@@ -43,7 +43,7 @@ jobs:
       - name: Test notice parsing and delivery safeguards
         run: python -m unittest discover -s automation/tests
       - name: Restore durable public-notice state
-        if: github.event_name != 'push' && inputs.mode != 'preview'
+        if: github.event_name != 'push' && inputs.mode != 'preview' && inputs.mode != 'mail-test'
         run: |
           mkdir -p "$STATE_DIR"
           if git ls-remote --exit-code --heads origin automation-state >/dev/null; then
@@ -60,12 +60,14 @@ jobs:
           args=()
           if [[ "$EVENT_NAME" == "push" || "$INPUT_MODE" == "preview" ]]; then
             args+=(--preview)
+          elif [[ "$INPUT_MODE" == "mail-test" ]]; then
+            args+=(--test-mail)
           elif [[ "$INPUT_MODE" == "digest" ]]; then
             args+=(--force-digest)
           fi
           python automation/run.py "${args[@]}"
       - name: Save durable state even on mail/source failure
-        if: always() && github.event_name != 'push' && inputs.mode != 'preview'
+        if: always() && github.event_name != 'push' && inputs.mode != 'preview' && inputs.mode != 'mail-test'
         shell: bash
         run: |
           if [[ ! -f "$STATE_DIR/state.json" ]]; then exit 0; fi

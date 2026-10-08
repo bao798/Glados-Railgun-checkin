@@ -43,3 +43,11 @@ GitHub schedule 是尽力调度，可能延迟或丢弃；电脑关机不影响�
 ## 官网适配
 
 支持上交 post 链接、中科大 onclick 链接、北理工及西农长文章编号、国防科大同站 JavaScript 跳转、中科院带 ../ 的栏目路径。浙大当前采用可访问的官网 HTTP 公告入口，只读取公开信息。任何入口异常仍会在报告里显示；工作流先执行解析与发送保护测试。
+
+## Google 邮箱
+
+收件邮箱与发信邮箱相互独立。只改为 Gmail 收信时，把 EMAIL_TO Secret 换为 Gmail 地址，继续配置 QQ 发信地址和 QQ SMTP 授权码即可。
+
+若使用 Gmail 发信：SMTP_USER Secret 填 Gmail 完整地址；SMTP_PASSWORD Secret 填 Google 应用专用密码；EMAIL_TO Secret 填收件地址。在 Actions Variables 中设置 SMTP_HOST=smtp.gmail.com、SMTP_PORT=465（SSL）。Google 应用专用密码要求启用两步验证，部分组织账户可能不支持。参考：https://support.google.com/accounts/answer/185833 。
+
+配置后 Actions → University private automation → Run workflow → mode=mail-test，仅发送一封测试邮件，不抓取官网、不读写通知队列。缺少配置会明确列出缺少的 Secret 名称，不打印凭据。SMTP 接受后仍需确认收件箱实际收到，再运行 mode=digest 初始化监控并验证日报。

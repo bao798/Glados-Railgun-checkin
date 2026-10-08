@@ -190,9 +190,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--preview', action='store_true', help='fetch and render only; no email or state mutation')
     ap.add_argument('--force-digest', action='store_true')
+    ap.add_argument('--test-mail', action='store_true', help='send a short mail test without scanning or changing notice state')
     ap.add_argument('--limit', type=int)
     args = ap.parse_args()
     now = dt.datetime.now(ZoneInfo('Asia/Shanghai'))
+    if args.test_mail:
+        if args.preview:
+            ap.error('--test-mail cannot be combined with --preview')
+        missing = [key for key in ('SMTP_USER', 'SMTP_PASSWORD', 'EMAIL_TO') if not os.getenv(key)]
+        if missing:
+            print('邮件配置缺失：' + '、'.join(missing) + '。请在仓库 Actions Secrets 中配置。')
+            return 1
+        try:
+            message = f'大学助手邮件测试成功。北京时间 {now:%Y-%m-%d %H:%M}。此测试不改变通知队列。'
+            send_mail('【大学助手】邮件链路测试', message, '<p>' + html.escape(message) + '</p>')
+            print('Mail accepted by SMTP server (receipt not yet verified).')
+            return 0
+        except Exception as e:
+            print('邮件测试失败：' + type(e).__name__ + '；请检查发信授权码、SMTP_HOST 与 SMTP_PORT。')
+            return 1
     config = json.loads((BASE/'sources.json').read_text())
     state_dir = Path(os.getenv('STATE_DIR', str(BASE/'state')))
     state_path = state_dir/'state.json'
@@ -207,6 +223,8 @@ def main():
             if health['articles']:
                 ingest(state, name, items, now)
             print(name, health['status'], health['articles'], health['matched'], flush=True)
+            if health['errors']:
+                print('来源异常：' + name + '：' + '; '.join(health['errors']), flush=True)
     health = glados_health(now)
     daily = args.force_digest or (now.hour >= 21 and state['last_digest'] != now.date().isoformat())
     pending = list(state['pending'].values())
