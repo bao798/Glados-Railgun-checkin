@@ -10,8 +10,6 @@ on:
   schedule:
     # Beijing time: 08:17, 12:17, 18:17, 22:17; avoid top-of-hour load.
     - cron: '17 0,4,10,14 * * *'
-    # Final daily retry and scheduler verification: Beijing 23:23.
-    - cron: '23 15 * * *'
 
 jobs:
   build:
