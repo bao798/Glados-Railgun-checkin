@@ -39,3 +39,7 @@ GitHub schedule 是尽力调度，可能延迟或丢弃；电脑关机不影响�
 本地预览：`python automation/run.py --preview`（Python 3.10+，仅标准库）。本地默认状态目录为 automation/state。测试：`python -m unittest discover -s automation/tests`。
 
 扩展来源：编辑 sources.json；校内通知可设 all_notices=true，其他来源按 keywords 筛选。暂时只接入已知GLaDOS签到，其他网站需要明确网址和登录方式后编写适配器；本系统不会对未知网站提交签到请求。
+
+## 官网适配
+
+支持上交 post 链接、中科大 onclick 链接、北理工及西农长文章编号、国防科大同站 JavaScript 跳转、中科院带 ../ 的栏目路径。浙大当前采用可访问的官网 HTTP 公告入口，只读取公开信息。任何入口异常仍会在报告里显示；工作流先执行解析与发送保护测试。

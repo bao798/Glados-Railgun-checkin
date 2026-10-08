@@ -7,6 +7,7 @@ import html
 from html.parser import HTMLParser
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import smtplib
@@ -19,23 +20,25 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 BASE = Path(__file__).resolve().parent
-ARTICLE = re.compile(r'/info/|/\d{4}/\d{2}|/t\d{8}_|/c\d+a\d+/|/\w*article\w*/|/\w*detail\w*|[?&](?:id|keyId|articleId|newsid)=|/\d{5,}\.(?:htm|html)', re.I)
+ARTICLE = re.compile(r'/info/|/news/|/post/|/art/|/[a-f0-9]{24,32}\.htm|/\d{4}/\d{1,2}|/t\d{8}_|/c\d+a\d+/|/\w*article\w*/|/\w*detail\w*|[?&](?:id|keyId|articleId|newsid)=\w+|/\d{5,}\.(?:htm|html)', re.I)
 CATEGORY = re.compile(r'推免|免试|夏令营|开放日|硕士招生|招生信息|招生公告|通知公告|招生动态|招生工作|最新公告')
 
 class Links(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.links, self.current = [], None
+        self.links, self.current, self.current_tag = [], None, None
     def handle_starttag(self, tag, attrs):
-        if tag == 'a':
+        a = dict(attrs)
+        match = re.search(r"window\.open\(['\"]([^'\"]+)", a.get('onclick', ''))
+        if tag == 'a' or match:
             self.finish()
-            a = dict(attrs)
-            self.current = [a.get('href', ''), a.get('title', ''), []]
+            self.current_tag = tag
+            self.current = [a.get('href', '') or (match[1] if match else ''), a.get('title', ''), []]
     def handle_data(self, data):
         if self.current:
             self.current[2].append(data)
     def handle_endtag(self, tag):
-        if tag == 'a':
+        if tag == self.current_tag:
             self.finish()
     def finish(self):
         if self.current:
@@ -43,10 +46,11 @@ class Links(HTMLParser):
             title = re.sub(r'\s+', ' ', title or ''.join(pieces)).strip()
             self.links.append((href, title))
             self.current = None
+            self.current_tag = None
 
 
 def fetch(url, token=None):
-    headers = {'User-Agent': 'UniversityNoticeMonitor/1.0 (hourly public notice checks)'}
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; UniversityNoticeMonitor/1.0)'}
     if token:
         headers['Authorization'] = 'Bearer ' + token
         headers['Accept'] = 'application/vnd.github+json'
@@ -69,7 +73,10 @@ def fetch(url, token=None):
 
 def canonical(url):
     p = urlsplit(url)
-    return urlunsplit((p.scheme, p.netloc.lower(), p.path, p.query, ''))
+    path = posixpath.normpath('/' + p.path.lstrip('/'))
+    if p.path.endswith('/') and path != '/':
+        path += '/'
+    return urlunsplit((p.scheme, p.netloc.lower(), path, p.query, ''))
 
 
 def scan(source, config):
@@ -86,17 +93,25 @@ def scan(source, config):
             parser = Links()
             parser.feed(body)
             parser.finish()
+            # Some official landing pages redirect with a literal JS URL.
+            redirect = re.search(r'window\.location(?:\.href)?\s*=\s*[\"\']([^\"\']+)', body)
+            if not parser.links and redirect:
+                target = canonical(urljoin(actual, redirect[1]))
+                if urlsplit(target).hostname == host and urlsplit(target).scheme in ('http', 'https'):
+                    if target not in visited and target not in queue:
+                        queue.append(target)
             for href, title in parser.links:
                 url = canonical(urljoin(actual, href))
                 if urlsplit(url).scheme not in ('http', 'https') or not title:
                     continue
-                if ARTICLE.search(url) and len(title) >= 8:
+                if ARTICLE.search(url) and len(title) >= 8 and urlsplit(url).hostname == host:
                     items[url] = {'title': title, 'url': url, 'source': source['name']}
                 elif CATEGORY.search(title) and len(title) < 22 and urlsplit(url).hostname == host:
                     if url not in visited and url not in queue:
                         queue.append(url)
         except Exception as e:
-            errors.append(type(e).__name__)  # never log response bodies / credentials
+            code = getattr(e, 'code', None)
+            errors.append(type(e).__name__ + (f' {code}' if code else '') + ' @ ' + page)
     relevant = [x for x in items.values() if source.get('all_notices') or any(k in x['title'] for k in config['keywords'])]
     for x in relevant:
         x['priority'] = any(k in x['title'] for k in config['priority_keywords'])
@@ -185,7 +200,9 @@ def main():
     status = {}
     sources = config['sources'][:args.limit] if args.limit else config['sources']
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-        for name, items, health in pool.map(lambda s: scan(s, config), sources):
+        futures = [pool.submit(scan, source, config) for source in sources]
+        for future in concurrent.futures.as_completed(futures):
+            name, items, health = future.result()
             status[name] = health
             if health['articles']:
                 ingest(state, name, items, now)
