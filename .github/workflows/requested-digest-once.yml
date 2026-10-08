@@ -1,0 +1,77 @@
+name: Requested daily digest once
+
+on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/requested-digest-once.yml']
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: university-assistant
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    if: github.event.head_commit.message == 'chore: send requested daily digest once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      STATE_DIR: ${{ github.workspace }}/notice-state
+      GITHUB_TOKEN: ${{ github.token }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Test notice parsing and delivery safeguards
+        run: python -m unittest discover -s automation/tests
+      - name: Restore durable public-notice state
+        run: |
+          mkdir -p "$STATE_DIR"
+          if git ls-remote --exit-code --heads origin automation-state >/dev/null; then
+            git fetch origin automation-state
+            git show FETCH_HEAD:state.json > "$STATE_DIR/state.json"
+          fi
+      - name: Monitor and deliver
+        id: run
+        shell: bash
+        run: python automation/run.py --force-digest
+      - name: Save durable state even on mail/source failure
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f "$STATE_DIR/state.json" ]]; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if git ls-remote --exit-code --heads origin automation-state >/dev/null; then
+            git fetch origin automation-state
+            git worktree add -B automation-state /tmp/notice-state-tree FETCH_HEAD
+          else
+            mkdir -p /tmp/notice-state-tree
+            git worktree add --detach /tmp/notice-state-tree HEAD
+            cd /tmp/notice-state-tree
+            git checkout --orphan automation-state
+            git rm -rf .
+          fi
+          cd /tmp/notice-state-tree
+          cp "$STATE_DIR/state.json" state.json
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: persist public-notice queue and delivery markers'
+            git push origin HEAD:automation-state
+          fi
+      - name: Upload public preview and health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: university-notice-report
+          path: automation/output/
+          retention-days: 7
