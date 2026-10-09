@@ -3,6 +3,8 @@ import importlib.util
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+import tempfile
+import json
 spec = importlib.util.spec_from_file_location('monitor', Path(__file__).parents[1]/'run.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
@@ -63,6 +65,33 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(m.main(),0)
         fetch.assert_not_called()
         send.assert_called_once()
+    def test_daily_only_delivery_and_retry(self):
+        real_datetime = dt.datetime
+        item = {'fingerprint': 'urgent', 'title': '推免通知', 'url': 'https://a/', 'source': 'a', 'urgent': True, 'priority': True, 'baseline': False}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'sources.json').write_text(json.dumps({'sources': []}))
+            state_path = root/'state.json'
+            state_path.write_text(json.dumps({'seen': {}, 'pending': {'urgent': item}, 'initialized': {}, 'last_digest': '', 'alerted': []}))
+            with patch.object(m, 'BASE', root), patch.dict(m.os.environ, {'STATE_DIR': folder}, clear=True), patch.object(m, 'glados_health', return_value='ok'), patch.object(m, 'send_mail') as send:
+                def invoke(hour, force=False):
+                    now = real_datetime(2026, 10, 9, hour, 37, tzinfo=m.ZoneInfo('Asia/Shanghai'))
+                    with patch.object(m.dt, 'datetime') as clock, patch.object(m.sys, 'argv', ['run.py'] + (['--force-digest'] if force else [])):
+                        clock.now.return_value = now
+                        return m.main()
+                self.assertEqual(invoke(10), 0)
+                send.assert_not_called()
+                self.assertIn('urgent', json.loads(state_path.read_text())['pending'])
+                send.side_effect = RuntimeError('SMTP unavailable')
+                self.assertEqual(invoke(21), 1)
+                self.assertEqual(json.loads(state_path.read_text())['last_digest'], '')
+                send.side_effect = None
+                self.assertEqual(invoke(22), 0)
+                self.assertEqual(send.call_count, 2)
+                self.assertEqual(json.loads(state_path.read_text())['last_digest'], '2026-10-09')
+                self.assertEqual(invoke(22), 0)
+                self.assertEqual(invoke(22, force=True), 0)
+                self.assertEqual(send.call_count, 2)
     def test_39_schools(self):
         cfg=m.json.loads((m.BASE/'sources.json').read_text())
         self.assertEqual(sum(s['group']=='985' for s in cfg['sources']),39)

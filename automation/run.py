@@ -226,11 +226,12 @@ def main():
             if health['errors']:
                 print('来源异常：' + name + '：' + '; '.join(health['errors']), flush=True)
     health = glados_health(now)
-    daily = args.force_digest or (now.hour >= 21 and state['last_digest'] != now.date().isoformat())
+    # Manual digest and fallback runs also respect the same Beijing-date marker.
+    daily = state['last_digest'] != now.date().isoformat() and (args.force_digest or (now.hour, now.minute) >= (21, 37))
     pending = list(state['pending'].values())
-    alerted = set(state['alerted'])
-    items = pending if daily or args.preview else [x for x in pending if x['urgent'] and not x['baseline'] and x['fingerprint'] not in alerted]
-    kind = '每日汇总' if daily or args.preview else '保研新通知'
+    # Every notice stays queued for the daily digest; no immediate alert emails.
+    items = pending
+    kind = '每日汇总'
     plain, rich = render(items, health, status, now, kind)
     out = BASE/'output'
     out.mkdir(exist_ok=True)
@@ -241,15 +242,12 @@ def main():
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
             f.write('## 大学生私人自动化系统\n\n' + plain + '\n')
     mail_failed = False
-    if not args.preview and (daily or items):
+    if not args.preview and daily:
         try:
             send_mail(f'【大学助手】{kind} {now:%m-%d} · {len(items)} 条', plain, rich)
-            if daily:
-                state['last_digest'] = now.date().isoformat()
-                state['pending'].clear()
-                state['alerted'] = []
-            else:
-                state['alerted'] = list(alerted | {x['fingerprint'] for x in items})
+            state['last_digest'] = now.date().isoformat()
+            state['pending'].clear()
+            state['alerted'] = []
             print('Mail accepted by SMTP server (receipt not yet verified).')
         except Exception as e:
             print('邮件未发送：' + type(e).__name__ + '；检查 SMTP Secrets / 服务器。待发队列已保留。')

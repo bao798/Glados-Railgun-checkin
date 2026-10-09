@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'preview: no mail/state write; digest: send test/daily digest; normal: scheduled behavior'
+        description: 'preview: no mail/state write; digest: send today's digest if not already sent; normal: scheduled behavior'
         default: digest
         type: choice
         options: [mail-test, preview, digest, normal]
