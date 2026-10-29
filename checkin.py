@@ -96,6 +96,7 @@ class Config:
 
     ENV_PUSH_KEY = "PUSHDEER_SENDKEY"
     ENV_COOKIES = "GLADOS_COOKIES"
+    ENV_COOKIES_2 = "GLADOS_COOKIES_2"
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
     ENV_VERBOSE = "GLADOS_VERBOSE"
 
@@ -126,6 +127,7 @@ class Config:
         """加载配置"""
         push_key_env: Optional[str] = os.environ.get(self.ENV_PUSH_KEY)
         raw_cookies_env: Optional[str] = os.environ.get(self.ENV_COOKIES)
+        second_cookies_env: Optional[str] = os.environ.get(self.ENV_COOKIES_2)
         exchange_plan_env: Optional[str] = os.environ.get(self.ENV_EXCHANGE_PLAN)
         verbose_env: Optional[str] = os.environ.get(self.ENV_VERBOSE)
 
@@ -135,13 +137,15 @@ class Config:
         else:
             self.push_key = push_key_env
 
-        if not raw_cookies_env:
-            logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_COOKIES}' 未设置。")
-            self.cookies_list = []
-        else:
-            self.cookies_list = [cookie.strip() for cookie in raw_cookies_env.split("&") if cookie.strip()]
-            if not self.cookies_list:
-                raise ValueError(f"环境变量 '{self.ENV_COOKIES}' 已设置，但未包含任何有效的 Cookie。")
+        # 各账号独立配置；继续兼容旧的 & 分隔格式，不记录凭据。
+        self.cookies_list = []
+        for raw in (raw_cookies_env, second_cookies_env):
+            for cookie in (raw or "").split("&"):
+                cookie = cookie.strip()
+                if cookie and cookie not in self.cookies_list:
+                    self.cookies_list.append(cookie)
+        if not self.cookies_list:
+            logger.warning("未设置有效的 GLADOS_COOKIES 或 GLADOS_COOKIES_2。")
 
         if not exchange_plan_env:
             logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_EXCHANGE_PLAN}' 未设置，将使用默认兑换计划 {self.DEFAULT_EXCHANGE_PLAN}。")
@@ -564,7 +568,7 @@ def main():
     logger.info(f"{LogEmoji.END} 签到完成")
 
     if failed:
-        logger.error("签到任务失败：请更新 GLADOS_COOKIES 并核对认证流程。")
+        logger.error("签到任务失败：请检查失败账号对应的 GLADOS_COOKIES / GLADOS_COOKIES_2 并核对认证流程。")
         raise SystemExit(1)
 
 

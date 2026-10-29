@@ -43,6 +43,9 @@ jobs:
         pip install requests
         pip install pypushdeer
 
+    - name: Test multi-account support
+      run: python -m unittest discover -s tests -v
+
     # 执行 签到脚本
     - name: Running checkin
       run: |
@@ -50,6 +53,7 @@ jobs:
       env:
         PUSHDEER_SENDKEY: ${{ secrets.PUSHDEER_SENDKEY }}
         GLADOS_COOKIES: ${{ secrets.GLADOS_COOKIES }}
+        GLADOS_COOKIES_2: ${{ secrets.GLADOS_COOKIES_2 }}
         GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
         GLADOS_VERBOSE: ${{ secrets.GLADOS_VERBOSE }}
 

@@ -30,7 +30,10 @@
 
 ![图片加载失败](imgs/3.png)
 
-- 多账号请在 `COOKIES` 中 添加多个 `cookies` 中间使用 `&`连接即可。（例如： `c1&c3&c3...`）
+- 第二个账号：在相同位置新增 Repository secret，名称为 `GLADOS_COOKIES_2`，值为第二个账号的完整 Cookie。第一个账号继续使用原有 `GLADOS_COOKIES`，不需要修改。
+- 仍兼容在 `GLADOS_COOKIES` 中使用 `&` 分隔多个账号；完全相同的 Cookie 会去重。未配置第二个账号时仍可正常运行。
+- 两个账号共享现有定时工作流（北京时间每天 08:17、12:17、18:17、22:17），分别显示结果；任一账号签到失败会使任务失败，重复签到视为成功。不要仅凭其中一个账号成功就判断全部账号成功。
+- 更新 Secret 后，进入 Actions → GLaDOS scheduled checkin → Run workflow，选择 `master` 进行测试。日志应显示加载 2 个 Cookie，且两个账号都显示“签到成功”或“重复签到”。不要将 Cookie 写入代码、Issue 或日志。
 
 3. 配置积分兑换策略（非必须）
 
@@ -59,7 +62,7 @@
 │
 ├─.github
 │  └─workflows
-│          gladosCheck.yml	# Actions 配置文件
+│          glados-scheduled-checkin.yml	# Actions 配置文件
 ```
 
 ## 更新日志
