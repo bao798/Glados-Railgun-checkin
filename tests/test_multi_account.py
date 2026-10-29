@@ -6,6 +6,12 @@ import checkin
 
 
 class MultiAccountTests(unittest.TestCase):
+    def setUp(self):
+        # 模拟结果不得混入真实签到日志，避免监控误判。
+        logger_patch = patch.object(checkin, "logger")
+        logger_patch.start()
+        self.addCleanup(logger_patch.stop)
+
     def config(self, **env):
         with patch.dict(os.environ, env, clear=True):
             return checkin.Config()
