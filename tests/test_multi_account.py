@@ -40,6 +40,7 @@ class MultiAccountTests(unittest.TestCase):
                 code=statuses[index - 1])
 
         with patch.object(checkin, "Config", return_value=config), \
+             patch.object(checkin.Checker, "_pick_domain", return_value="glados.cloud"), \
              patch.object(checkin.Checker, "_checkin_on_domain", perform), \
              patch.object(checkin.PushService, "send"):
             try:
@@ -49,6 +50,27 @@ class MultiAccountTests(unittest.TestCase):
                 exit_code = error.code
         self.assertEqual(calls, [("fake-one", 1), ("fake-two", 2)])
         return exit_code
+
+    def test_no_working_domain_means_cookie_expired(self):
+        """所有域名 status 都不通过时，不调用签到、直接失败并明确提示换 Cookie。"""
+        config = self.config(GLADOS_COOKIES="fake-one")
+        with patch.object(checkin, "Config", return_value=config), \
+             patch.object(checkin.Checker, "_pick_domain", return_value=None), \
+             patch.object(checkin.Checker, "_checkin_on_domain") as mocked, \
+             patch.object(checkin.PushService, "send"):
+            try:
+                checkin.main()
+                exit_code = 0
+            except SystemExit as error:
+                exit_code = error.code
+        mocked.assert_not_called()
+        self.assertEqual(exit_code, 1)
+
+    def test_exchange_is_disabled(self):
+        """自动兑换已关闭：Config 忽略旧兑换计划，且 API 上不再有 exchange 方法。"""
+        config = self.config(GLADOS_COOKIES="fake-one", GLADOS_EXCHANGE_PLAN="plan500")
+        self.assertEqual(config.exchange_plan, "none")
+        self.assertFalse(hasattr(checkin.API, "exchange"))
 
     def test_failure_does_not_skip_other_account(self):
         self.assertEqual(self.run_main([checkin.CheckinStatus.FAILURE,

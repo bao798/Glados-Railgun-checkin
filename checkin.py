@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import time
 import logging
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
@@ -100,21 +101,16 @@ class Config:
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
     ENV_VERBOSE = "GLADOS_VERBOSE"
 
-    """默认兑换计划"""
-    DEFAULT_EXCHANGE_PLAN = "plan500"
+    """自动兑换已关闭：只签到领积分，绝不自动兑换。
+    保留 GLADOS_EXCHANGE_PLAN 这个环境变量名只是为了兼容旧配置，
+    读到它也会忽略，不会触发任何兑换。需要兑换时请手动在官网操作。"""
+    DEFAULT_EXCHANGE_PLAN = "none"
 
     """默认是否输出详细响应"""
     DEFAULT_VERBOSE = False
 
-    """默认域名"""
-    DOMAINS = ["glados.cloud"]
-
-    """兑换计划列表"""
-    EXCHANGE_PLANS = {
-        ExchangePlan.PLAN100.value: 100,
-        ExchangePlan.PLAN200.value: 200,
-        ExchangePlan.PLAN500.value: 500,
-    }
+    """默认域名：先试 glados.cloud，status 无权限时再试备用域名"""
+    DOMAINS = ["glados.cloud", "glados.rocks", "railgun.info"]
 
     def __init__(self):
         self.push_key: str = ""
@@ -148,15 +144,11 @@ class Config:
             logger.warning("未设置有效的 GLADOS_COOKIES 或 GLADOS_COOKIES_2。")
 
         if not exchange_plan_env:
-            logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_EXCHANGE_PLAN}' 未设置，将使用默认兑换计划 {self.DEFAULT_EXCHANGE_PLAN}。")
+            logger.info(f"{LogEmoji.INFO} 自动兑换已关闭，只签到领积分，不兑换。")
             self.exchange_plan = self.DEFAULT_EXCHANGE_PLAN
         else:
-            if exchange_plan_env in self.EXCHANGE_PLANS:
-                self.exchange_plan = exchange_plan_env
-                logger.info(f"{LogEmoji.SUCCESS} 使用指定的兑换计划: {self.exchange_plan}")
-            else:
-                logger.warning(f"{LogEmoji.WARNING} 环境变量 '{self.ENV_EXCHANGE_PLAN}' 的值 '{exchange_plan_env}' 无效，将使用默认兑换计划 {self.DEFAULT_EXCHANGE_PLAN}。")
-                self.exchange_plan = self.DEFAULT_EXCHANGE_PLAN
+            logger.info(f"{LogEmoji.INFO} 自动兑换已关闭，忽略 {self.ENV_EXCHANGE_PLAN} 的值，只签到领积分，不兑换。")
+            self.exchange_plan = self.DEFAULT_EXCHANGE_PLAN
 
         logger.info(f"{LogEmoji.INFO} 共加载了 {len(self.cookies_list)} 个 Cookie 用于签到。")
         logger.info(f"{LogEmoji.INFO} 当前 {self.ENV_PUSH_KEY} {'已设置' if push_key_env else '未设置'}。")
@@ -354,26 +346,8 @@ class API:
             self._log("warning", LogEmoji.WARNING, "获取积分失败", force=True)
             return "None 积分", 0
 
-    @log_method
-    def exchange(self, cookies: str, plan: str, required_points: int) -> str:
-        """执行兑换"""
-        url = self._get_full_url(self.EXCHANGE_URL)
-        response = self._make_request(url, "POST", {"planType": plan}, cookies)
-
-        if response:
-            data = response.json()
-            code = data.get("code", -2)
-            message = data.get("message", "未知错误")
-
-            if code == 0:
-                self._log("info", LogEmoji.SUCCESS, f"{{ code : {code}, message : {message} }}")
-                return f"兑换成功: {plan}"
-            else:
-                self._log("info", LogEmoji.FAIL, f"{{ code : {code}, message : {message} }}", force=True)
-                return f"兑换失败: {message}"
-        else:
-            self._log("warning", LogEmoji.WARNING, "兑换失败", force=True)
-            return "兑换失败"
+    # 注意：自动兑换已删除。积分只查询、不兑换，如需兑换请手动在官网操作。
+    # 这里刻意不保留 exchange()，防止旧代码或误调用再次触发兑换。
 
 
 @dataclass()
@@ -430,61 +404,86 @@ class Checker:
             logger.info(f"{LogEmoji.COOKIE}[{cookie_idx}] {LogEmoji.DOMAIN}[{domain}] {emoji} {message}")
 
     def checkin_all(self):
-        """执行所有签到任务"""
+        """执行所有签到任务：每个 Cookie 只在第一个 status 成功的域名上签到一次。
+        这样 glados.cloud 的 Cookie 不会在 railgun.info 上重复签到，
+        railgun.info 的 Cookie 也能在备用域名上签到；所有域名 status 都
+        返回无权限时，直接判定该 Cookie 已失效，不再盲目签到。"""
         cookie_count = len(self.config.cookies_list)
-        domain_count = len(self.config.DOMAINS)
-        total_tasks = cookie_count * domain_count
-        task_idx = 0
-
-        logger.info(f"{LogEmoji.INFO} 共 {cookie_count} 个 Cookie, {domain_count} 个域名, 共 {total_tasks} 个任务")
+        logger.info(f"{LogEmoji.INFO} 共 {cookie_count} 个 Cookie，逐个探测可用域名后签到")
 
         for cookie_idx, cookie in enumerate(self.config.cookies_list, 1):
             logger.info(f"{LogEmoji.START} ========== 开始处理 Cookie {cookie_idx} ==========")
-
-            for domain in self.config.DOMAINS:
-                task_idx += 1
-                logger.info(f"{LogEmoji.INFO} ----- 任务 {task_idx}/{total_tasks}: {LogEmoji.COOKIE}[{cookie_idx}] on {LogEmoji.DOMAIN}[{domain}] -----")
-
-                result = self._checkin_on_domain(cookie, cookie_idx, domain)
+            domain = self._pick_domain(cookie, cookie_idx)
+            if domain is None:
+                result = CheckinResult(cookie_idx, self.config.DOMAINS[0],
+                                       status="签到失败", code=CheckinStatus.FAILURE,
+                                       days="None 天", points_total="None 积分",
+                                       exchange="未兑换")
                 self.results.append(result)
+                logger.error(f"{LogEmoji.COOKIE}[{cookie_idx}] {LogEmoji.ERROR} Cookie 已失效或无权限："
+                             f"glados.cloud / glados.rocks / railgun.info 的 status 均返回无权限，"
+                             f"请重新登录 GLaDOS 抓取最新 Cookie 更新 GLADOS_COOKIES / GLADOS_COOKIES_2。")
+                continue
 
-                result_message = f"结果: {result.status}"
-                if result.code == CheckinStatus.SUCCESS:
-                    if self.config.verbose:
-                        result_message = f"结果: {result.status}, 获得 {result.points} 积分, 剩余 {result.days}, 总 {result.points_total}, {result.exchange}"
-                    self._log(cookie_idx, domain, LogEmoji.SUCCESS, result_message, force=True)
-                else:
-                    self._log(cookie_idx, domain, LogEmoji.WARNING, result_message, force=True)
+            result = self._checkin_on_domain(cookie, cookie_idx, domain)
+            self.results.append(result)
+            result_message = f"结果: {result.status}"
+            if result.code == CheckinStatus.SUCCESS:
+                if self.config.verbose:
+                    result_message = f"结果: {result.status}, 获得 {result.points} 积分, 剩余 {result.days}, 总 {result.points_total}, {result.exchange}"
+                self._log(cookie_idx, domain, LogEmoji.SUCCESS, result_message, force=True)
+            else:
+                self._log(cookie_idx, domain, LogEmoji.WARNING, result_message, force=True)
+
+    def _pick_domain(self, cookie: str, cookie_idx: int) -> Optional[str]:
+        """探测哪个域名认这个 Cookie：status 返回剩余天数即为可用。"""
+        for domain in self.config.DOMAINS:
+            with API(domain, cookie_idx, verbose=self.config.verbose) as api:
+                days_str, status_code = api.get_status(cookie)
+            if status_code == 0 and days_str != "None 天":
+                logger.info(f"{LogEmoji.COOKIE}[{cookie_idx}] {LogEmoji.DOMAIN}[{domain}] "
+                            f"{LogEmoji.SUCCESS} 该域名认此 Cookie，剩余 {days_str}")
+                return domain
+            logger.info(f"{LogEmoji.COOKIE}[{cookie_idx}] {LogEmoji.DOMAIN}[{domain}] "
+                        f"status 未通过（code={status_code}），试下一个域名")
+        return None
 
     def _checkin_on_domain(self, cookie: str, cookie_idx: int, domain: str) -> CheckinResult:
         result = CheckinResult(cookie_idx, domain)
+        result.exchange = "未兑换（自动兑换已关闭）"
 
         with API(domain, cookie_idx, verbose=self.config.verbose) as api:
-            # 1. 获取状态
+            # 1. 获取状态（_pick_domain 已确认可用，这里只为记录剩余天数）
             self._log(cookie_idx, domain, LogEmoji.STATUS, "查询剩余天数")
             days_str, status_code = api.get_status(cookie)
             result.days = days_str
 
-            # 2. 签到
+            # 2. 签到：网络失败或 Cloudflare 验证失败（code 5，11-14 两个账号
+            # 都是这个错）时重试，间隔 60 秒、最多重试 2 次；Cookie 失效不重试。
+            # Cloudflare 拦截是偶发的，GitHub 机房 IP 容易被拦，重试和第二天
+            # 的第二次签到都是兜底。
             self._log(cookie_idx, domain, LogEmoji.CHECKIN, "执行签到")
             checkin_result = api.checkin(cookie)
+            for attempt in (1, 2):
+                message = checkin_result.get("message", "")
+                retryable = checkin_result.get("code") == CheckinStatus.FAILURE and (
+                    "网络请求失败" in message or "Cloudflare" in message
+                )
+                if not retryable:
+                    break
+                logger.warning(f"{LogEmoji.COOKIE}[{cookie_idx}] 签到失败可重试（{message}），60 秒后第 {attempt} 次重试")
+                time.sleep(60)
+                checkin_result = api.checkin(cookie)
             result.status = checkin_result["status"]
             result.code = checkin_result.get("code", CheckinStatus.FAILURE)
+            result.points = checkin_result.get("points", "0")
 
-            # 3. 获取积分
+            # 3. 获取积分（只查询，不兑换）
             self._log(cookie_idx, domain, LogEmoji.POINTS, "查询总积分")
             points_str, points_num = api.get_points(cookie)
             result.points_total = points_str
 
-            # 4. 执行兑换
-            required_points = self.config.EXCHANGE_PLANS.get(self.config.exchange_plan, 500)
-            self._log(
-                cookie_idx,
-                domain,
-                LogEmoji.EXCHANGE,
-                f"开始兑换 {self.config.exchange_plan} (需要 {required_points} 积分)",
-            )
-            result.exchange = api.exchange(cookie, self.config.exchange_plan, required_points)
+            # 4. 不执行兑换：积分只累积，兑换请手动在官网操作。
 
         return result
 
