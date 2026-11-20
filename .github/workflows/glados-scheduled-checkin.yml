@@ -1,4 +1,4 @@
-name: GLaDOS scheduled checkin
+name: GLaDOS legacy checkin disabled (maintenance only)
 
 on:
   workflow_dispatch:
@@ -13,6 +13,8 @@ on:
 
 jobs:
   build:
+    # Migrated to Windows local runner; never execute legacy HTTP checkin.
+    if: ${{ false }}
     name: glados/railgun checkin
     runs-on: ubuntu-latest
       

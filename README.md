@@ -1,81 +1,9 @@
-# Glados自动签到
+# GLaDOS Windows 本机签到
 
-## 食用方式：
+已根据用户选择，迁移至 [badarch47/glados_checkin](https://github.com/badarch47/glados_checkin) 的本机适配方案。
 
-### 注册一个GLaDOS的账号([注册地址](https://glados.space/landing/0A58E-NV28S-6U3QV-33VMG))
+**入口：[windows-checkin/README.md](windows-checkin/README.md)**
 
-#### 我的邀请码：([0A58E-NV28S-6U3QV-33VMG](https://0a58e-nv28s-6u3qv-33vmg.glados.space)) 
+旧 Python 签到 job 已禁用；原工作流的维护 job 保留。旧 GitHub Secrets 未读取、复制或修改，新的本机配置需要由用户在本机输入并使用 Windows DPAPI 加密保存。
 
-#### 我的优惠码（9折）：([DEVILSTORE](https://0a58e-nv28s-6u3qv-33vmg.glados.space)) 
-
-### **Fork**本仓库
-
-![图片加载失败](imgs/1.png)
-
-### 添加**secret**
-
-1. 跳转至自己的仓库的`Settings`->`Secrets and variables`->`Action`
-
-2. 添加1个`repository secret`，命名为`GLADOS_COOKIES`，其值对应GLaDOS账号的cookie值中的有效部分（获取方式如下）
-
-- 在GLaDOS的签到页面按`F12`
-
-- 切换到`Network`页面下，刷新
-
-![图片加载失败](imgs/2.png)
-
-- 点击第一个选项卡后在`Request Headers`下找到`Cookie`，右键复制cookie的值即可
-
-  > 参考格式：koa:sess=eyJ1c2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxAwMH0=; koa:sess.sig=xJkOxxxxxxxxxxxxxxxtnM;
-
-![图片加载失败](imgs/3.png)
-
-- 第二个账号：在相同位置新增 Repository secret，名称为 `GLADOS_COOKIES_2`，值为第二个账号的完整 Cookie。第一个账号继续使用原有 `GLADOS_COOKIES`，不需要修改。
-- 仍兼容在 `GLADOS_COOKIES` 中使用 `&` 分隔多个账号；完全相同的 Cookie 会去重。未配置第二个账号时仍可正常运行。
-- 两个账号共享现有定时工作流（北京时间每天 08:17、20:17，共两次），分别显示结果；任一账号签到失败会使任务失败，重复签到视为成功。不要仅凭其中一个账号成功就判断全部账号成功。
-- 更新 Secret 后，进入 Actions → GLaDOS scheduled checkin → Run workflow，选择 `master` 进行测试。日志应显示加载 2 个 Cookie，且两个账号都显示“签到成功”或“重复签到”。不要将 Cookie 写入代码、Issue 或日志。
-- Cookie 会过期：日志出现“Cookie 已失效或无权限”时，按上面步骤重新抓取最新 Cookie 更新 Secret，否则签到会一直失败。
-
-3. 积分兑换：已关闭自动兑换
-
-- 本仓库只签到领积分，不自动兑换积分。旧的 `GLADOS_EXCHANGE_PLAN` Secret 留着也会被忽略，不会触发兑换。如需兑换，请手动在 GLaDOS 官网操作。
-
-4. 手机推送（非必须）
-
-- 添加1个`repository secret`，命名为`PUSHDEER_SENDKEY`，其值对应 PushDeer key: ([获取地址](https://www.pushdeer.com/product.html))。
-
-### **star**自己的仓库
-
-![图片加载失败](imgs/4.png)
-
-## 文件结构
-
-```shell
-│  checkin.py	# 签到脚本
-│
-├─.github
-│  └─workflows
-│          glados-scheduled-checkin.yml	# Actions 配置文件
-```
-
-## 更新日志
-
-- **2026-01**: 重构代码，添加log输出方便定位，支持新版网址，支持配置积分兑换策略。
-- **2026-04**: 优化代码逻辑，优化日志输出，支持[新版域名](https://railgun.info) ，在 GLADOS_COOKIES 中添加新版域名下的 cookies 即可使用。
-
-
-## 问题排查与定位
-- 大家可以通过查询 actions 中的 running checkin 日志快速定位问题，有其他问题提交issue。
-
-  <img width="1684" height="844" alt="image" src="https://github.com/user-attachments/assets/45348a5f-43e4-45f5-8fdf-ce84d343b30d" />
-
-## 声明
-
-本项目不保证稳定运行与更新, 因GitHub相关规定可能会删库, 请注意备份
-
-
-
-
-
-
-
+本机安装与真实账号验收尚未完成，不能把代码迁移视为自动签到已恢复。正常签到保持安静；失败在 Windows 本机弹窗，ChatGPT 兜底不自动恢复。

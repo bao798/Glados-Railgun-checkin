@@ -1,0 +1,13 @@
+{
+  "name": "glados-windows-local-adaptation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "main": "node main.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}
